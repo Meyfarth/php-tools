@@ -11,11 +11,24 @@
 		"Other"
 	],
 	"activationEvents": [
+        "onCommand:phpTools.extractConstant",
+        "onCommand:phpTools.extractVariable"
 	],
 	"main": "./out/extension.js",
 	"contributes": {
 		"commands": [
-
+			{
+				"when": "resourceLangId == php",
+				"command": "phpTools.extractConstant",
+				"title": "Extract into a constant",
+				"category": "PHP Tools"
+			},
+			{
+				"when": "resourceLangId == php",
+				"command": "phpTools.extractVariable",
+				"title": "Extract into a variable",
+				"category": "PHP Tools"
+			}
 		]
 	},
 	"scripts": {
