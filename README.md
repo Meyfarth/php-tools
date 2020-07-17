@@ -8,24 +8,28 @@ Php-tools is an extension that includes some features related to php development
 
 Extract constants
 
-TODO animation
+![Extract constant animation](./doc/images/extract-constant.gif)
 
-Or variables
+Extract variables
 
-TODO animation
+![Extract constant animation](./doc/images/extract-variable.gif)
 
 Or even methods
 
+TODO code :sweat-smile:
 
 ## Requirements
 
-N/A
+A php file
 
 ## Extension Settings
 
 N/A for now
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
+What's next into the configuration:
+- Configure default visibility for extracting methods and constants
+- Typehint new property
+
 
 For example:
 
@@ -36,5 +40,17 @@ This extension contributes the following settings:
 
 ## Known Issues
 
-In development
+Alpha version, what do you expect?
 
+
+## What's next:
+- Extract method
+- Add several occurences to extraction
+- Add constant to the file (without moving the cursor)
+- Add property + constructor
+- Generate getters and/or setters
+- Add constructor property (can use the 'Add php property' plugin for now)
+- Flip properties inside a method call or signature
+- Toggle context menu with all those options
+- Toggle context menu contextualized (depending on cursor position)
+- Generate namespaced php file

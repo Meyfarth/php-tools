@@ -4,10 +4,6 @@ exports.deactivate = exports.activate = void 0;
 const vscode = require("vscode");
 const extract_1 = require("./extract");
 function activate(context) {
-    let helloWorld = vscode.commands.registerCommand('phpTools.helloWorld', () => {
-        vscode.window.showInformationMessage("Hello from extension");
-    });
-    context.subscriptions.push(helloWorld);
     let addProperty = vscode.commands.registerCommand('phpTools.addProperty', () => {
         vscode.window.showInformationMessage("This feature is not implemented yet");
     });

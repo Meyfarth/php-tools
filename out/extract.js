@@ -11,16 +11,20 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Extractor = void 0;
 const vscode = require("vscode");
+const Parser_1 = require("./parser/Parser");
+const util_1 = require("./util/util");
 class Extractor {
     constructor() {
         this.errorMessage = '';
         this.constantBlock = null;
+        this.traitUsageBlock = null;
         this.defaultTabSize = 4;
         this.constVisibility = 'public'; // TODO get this through configuration
-        this.traitUsageBlock = null;
+        // TODO idea : having each line referencing the start of the block if in block
+        this.blockMapping = [];
     }
     extractConstant() {
-        var _a, _b, _c, _d, _e;
+        var _a, _b, _c, _d, _e, _f;
         return __awaiter(this, void 0, void 0, function* () {
             // TODO see if we can have constant visibility as a parameter
             this.reset();
@@ -41,29 +45,30 @@ class Extractor {
             const selectionRange = new vscode.Range(selection.start, selection.end);
             const text = (_b = this.getActiveTextEditor()) === null || _b === void 0 ? void 0 : _b.document.getText(selection);
             const constantName = yield this.promptForName('constant');
-            let lineBeforeInsert = null;
+            if (constantName === undefined || constantName.trim() === '') {
+                return;
+            }
+            let lineStart = null;
             if ((_c = this.constantBlock) === null || _c === void 0 ? void 0 : _c.end) {
-                lineBeforeInsert = this.constantBlock.end;
+                lineStart = this.constantBlock.end;
             }
-            else if (this.traitUsageBlock) {
-                // TODO use traits
-                lineBeforeInsert = this.traitUsageBlock.end;
+            else if ((_d = this.traitUsageBlock) === null || _d === void 0 ? void 0 : _d.end) {
+                lineStart = this.traitUsageBlock.end;
             }
-            else if (this.classLine) {
-                lineBeforeInsert = this.getClassOpenBraceLineNumber(this.classLine);
+            else if (this.classLineNumber) {
+                lineStart = this.classLineNumber - 1;
             }
-            if (!lineBeforeInsert) {
+            if (!lineStart) {
                 vscode.window.showWarningMessage('Could not find where to insert the constant');
                 return;
             }
-            yield ((_d = this.getActiveTextEditor()) === null || _d === void 0 ? void 0 : _d.edit((editBuilder) => {
+            yield ((_e = this.getActiveTextEditor()) === null || _e === void 0 ? void 0 : _e.edit((editBuilder) => {
                 editBuilder.replace(selectionRange, `self::${constantName}`);
             }));
-            yield ((_e = this.getActiveTextEditor()) === null || _e === void 0 ? void 0 : _e.insertSnippet(new vscode.SnippetString(this.indentText(`${this.constVisibility} const ${constantName} = ${text};\n`)), new vscode.Position(lineBeforeInsert + 1, 0), {
+            yield ((_f = this.getActiveTextEditor()) === null || _f === void 0 ? void 0 : _f.insertSnippet(new vscode.SnippetString(this.indentText(`${this.constVisibility} const ${constantName} = ${text};\n`)), new vscode.Position(lineStart, 0), {
                 undoStopBefore: false,
                 undoStopAfter: false
             }));
-            vscode.window.showInformationMessage(`You want to extract the text '${text}' in a constant named '${constantName}'? THEN DO IT YOURSELF FFS`);
         });
     }
     extractVariable() {
@@ -90,11 +95,29 @@ class Extractor {
             yield ((_c = this.getActiveTextEditor()) === null || _c === void 0 ? void 0 : _c.edit((editBuilder) => {
                 editBuilder.replace(selectionRange, `$${variableName}`);
             }));
-            yield ((_d = this.getActiveTextEditor()) === null || _d === void 0 ? void 0 : _d.insertSnippet(new vscode.SnippetString(this.escapeForSnippet(this.indentText(`$${variableName} = ${text};\n`, this.detectIndentation(selection)))), new vscode.Position(selection.start.line, 0), {
+            yield ((_d = this.getActiveTextEditor()) === null || _d === void 0 ? void 0 : _d.insertSnippet(new vscode.SnippetString(this.escapeForSnippet(this.indentText(`$${variableName} = ${text};\n`, this.detectIndentation(selection)))), new vscode.Position(this.getVariableInsertionLine(selection.start.line.valueOf()), 0), {
                 undoStopBefore: false,
                 undoStopAfter: false
             }));
         });
+    }
+    getVariableInsertionLine(line) {
+        console.log(this.blockMapping);
+        /**
+         * Use case that won't insert the variable before the statement
+         return $this->emailGenerator->generate(
+            'serviceRequestPostedConfirmation',
+            $this->getTranslatedSubject($serviceRequest),
+            $data,
+            self::CAMPAIGN_NAME,
+            $this->getGeneralEmailAddress($externalServiceRequest),
+            $this->getEmailAddressForConsumer($consumer)
+        );
+        */
+        if (!isNaN(this.blockMapping[line])) {
+            return this.blockMapping[line] - 1;
+        }
+        return line;
     }
     extractMethod() {
         return __awaiter(this, void 0, void 0, function* () {
@@ -109,34 +132,35 @@ class Extractor {
         return str.charAt(0).toUpperCase() + str.substr(1).toLowerCase();
     }
     parseDocument(document) {
-        var _a, _b;
-        let startingLine = 0;
-        let endingLine = 0;
-        if (document) {
-            endingLine = document.lineCount - 1;
+        const code = document.getText();
+        const classStructure = Parser_1.parseCode(code);
+        this.classLineNumber = classStructure.getFirstBodyLine();
+        if (classStructure.hasConstant()) {
+            this.constantBlock = {
+                start: classStructure.getFirstConstant().getStartPosition().line.valueOf(),
+                end: classStructure.getLastConstant().getEndPosition().line.valueOf(),
+                indentSize: classStructure.getFirstConstant().getStartPosition().column.valueOf() || this.defaultTabSize
+            };
         }
-        const selection = (_a = vscode.window.activeTextEditor) === null || _a === void 0 ? void 0 : _a.selection.active;
-        // Store the start of the class
-        let cursorPosition = (_b = this.getActiveTextEditor()) === null || _b === void 0 ? void 0 : _b.selection.start.line;
-        if (!cursorPosition) {
-            cursorPosition = 0;
+        if (classStructure.hasTraitUsage()) {
+            this.traitUsageBlock = {
+                start: classStructure.getFirstTrait().getStartPosition().line.valueOf(),
+                end: classStructure.getLastTrait().getEndPosition().line.valueOf(),
+                indentSize: classStructure.getFirstTrait().getStartPosition().column.valueOf() || this.defaultTabSize
+            };
         }
-        this.classLine = this.getClassLineFromCursor(startingLine, endingLine, cursorPosition);
-        this.checkDocumentValidity();
-        if (!this.classLine) {
-            return;
-        }
-        // Store const block position
-        this.parseConstantPositions(this.classLine.lineNumber, endingLine);
-        this.parseTraitUsagePositions(this.classLine.lineNumber, endingLine);
-        // TODO: Store properties block position for later
-        // TODO: Store end of method for later (when doing extract method)
-        this.checkDocumentValidity();
+        this.mapBlocks(classStructure);
     }
-    checkDocumentValidity() {
-        if (!this.classLine) {
-            this.errorMessage = 'No class line found in the document';
-        }
+    mapBlocks(classStructure) {
+        classStructure.getMethods().map(method => {
+            method.getChildren().map(structure => {
+                const startLine = structure.getStartPosition().line.valueOf();
+                const endLine = structure.getEndPosition().line.valueOf();
+                for (const i of util_1.range(startLine, endLine)) {
+                    this.blockMapping[i] = startLine;
+                }
+            });
+        });
     }
     getSelectedText() {
         var _a;
@@ -151,8 +175,8 @@ class Extractor {
     }
     getClassLineFromCursor(startingLine, endingLine, cursorPosition) {
         // Go up from the cursor to the starting of the line, then go down again if none found
-        for (let lineNumber = cursorPosition; lineNumber >= startingLine; lineNumber--) {
-            const textLine = this.getClassFromLine(lineNumber);
+        for (let linenumber = cursorPosition; linenumber >= startingLine; linenumber--) {
+            const textLine = this.getClassFromLine(linenumber);
             if (textLine) {
                 return textLine;
             }
@@ -160,17 +184,17 @@ class Extractor {
         if (cursorPosition === endingLine) {
             return;
         }
-        for (let lineNumber = cursorPosition; lineNumber < endingLine; lineNumber++) {
-            const textLine = this.getClassFromLine(lineNumber);
+        for (let linenumber = cursorPosition; linenumber < endingLine; linenumber++) {
+            const textLine = this.getClassFromLine(linenumber);
             if (textLine) {
                 return textLine;
             }
         }
         return;
     }
-    getClassFromLine(lineNumber) {
+    getClassFromLine(linenumber) {
         var _a;
-        const textLine = (_a = this.getActiveTextEditor()) === null || _a === void 0 ? void 0 : _a.document.lineAt(lineNumber);
+        const textLine = (_a = this.getActiveTextEditor()) === null || _a === void 0 ? void 0 : _a.document.lineAt(linenumber);
         if (!textLine) {
             return;
         }
@@ -182,40 +206,9 @@ class Extractor {
     isClassLine(text) {
         return /(?:^(?:(?:final|abstract)\s+)?class\s+\w+)|(new\s+class)/.test(text);
     }
-    getClassOpenBraceLineNumber(classLine) {
-        const isSingleLine = /(?:.*(?:{)$)/.test(classLine.text);
-        return isSingleLine ? classLine.lineNumber : (classLine.lineNumber + 1);
-    }
     parseConstantPositions(startingLine, endingLine) {
-        this.constantBlock = this.parseBlock(startingLine, endingLine, /(?:^(?:(?:private|protected|public)\s+)?const\s+\w+)/);
     }
     parseTraitUsagePositions(startingLine, endingLine) {
-        this.traitUsageBlock = this.parseBlock(startingLine, endingLine, /(?:^\s*use\s+\w+)/);
-    }
-    parseBlock(startingLine, endingLine, pattern) {
-        var _a, _b;
-        let startBlock = null;
-        let endBlock = null;
-        let indentSize = 0;
-        for (let lineNumber = startingLine; lineNumber <= endingLine; lineNumber++) {
-            const textLine = (_a = this.getActiveTextEditor()) === null || _a === void 0 ? void 0 : _a.document.lineAt(lineNumber);
-            if (!textLine) {
-                continue;
-            }
-            if (pattern.test(textLine.text.trim())) {
-                if (!startBlock) {
-                    startBlock = lineNumber;
-                }
-                else {
-                    endBlock = lineNumber;
-                }
-            }
-        }
-        if (startBlock) {
-            const text = ((_b = this.getActiveTextEditor()) === null || _b === void 0 ? void 0 : _b.document.lineAt(startingLine).text) || '';
-            indentSize = text.indexOf(text.trim());
-        }
-        return { start: startBlock, end: endBlock || startBlock, indentSize: indentSize };
     }
     indentText(text, level = 1) {
         if (level < 1) {
@@ -237,7 +230,7 @@ class Extractor {
         var _a;
         const text = (_a = this.getActiveTextEditor()) === null || _a === void 0 ? void 0 : _a.document.lineAt(selection.start.line);
         if (text) {
-            return Math.ceil(text.text.search(/\S|$/) / 4);
+            return Math.min(Math.ceil(text.text.search(/\S|$/) / 4), 2);
         }
         return 1;
     }
@@ -252,7 +245,7 @@ class Extractor {
     }
     reset() {
         this.errorMessage = '';
-        this.classLine = undefined;
+        this.classLineNumber = undefined;
         this.constantBlock = null;
     }
 }

@@ -1,9 +1,14 @@
 {
 	"name": "php-tools",
+	"publisher": "Meyfarth",
 	"displayName": "PHP Tools",
 	"description": "Commonly used php tools for dev",
 	"license": "MIT",
-	"version": "0.0.1",
+	"version": "0.0.2",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/Meyfarth/php-tools.git"
+	},
 	"engines": {
 		"vscode": "^1.46.0"
 	},
@@ -11,8 +16,8 @@
 		"Other"
 	],
 	"activationEvents": [
-        "onCommand:phpTools.extractConstant",
-        "onCommand:phpTools.extractVariable"
+		"onCommand:phpTools.extractConstant",
+		"onCommand:phpTools.extractVariable"
 	],
 	"main": "./out/extension.js",
 	"contributes": {
@@ -51,5 +56,9 @@
 		"mocha": "^7.1.2",
 		"typescript": "^3.8.3",
 		"vscode-test": "^1.3.0"
+	},
+	"dependencies": {
+		"php-parser": "^3.0.1",
+		"sinon": "^9.0.2"
 	}
 }
